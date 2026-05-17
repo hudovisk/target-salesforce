@@ -15,8 +15,8 @@ class TargetSalesforce(Target):
     name = "target-salesforce"
     config_jsonschema = th.PropertiesList(
         th.Property(
-            "client_id", 
-            th.StringType, 
+            "client_id",
+            th.StringType,
             description="OAuth client_id",
         ),
         th.Property(
@@ -32,14 +32,14 @@ class TargetSalesforce(Target):
             description="OAuth refresh_token",
         ),
         th.Property(
-            "username", 
-            th.StringType, 
+            "username",
+            th.StringType,
             description="User/password username",
         ),
         th.Property(
-            "password", 
-            th.StringType, 
-            secret=True, 
+            "password",
+            th.StringType,
+            secret=True,
             description="User/password username",
         ),
         th.Property(
@@ -47,6 +47,23 @@ class TargetSalesforce(Target):
             th.StringType,
             secret=True,
             description="User/password generated security token. Reset under your Account Settings",
+        ),
+        th.Property(
+            "jwt_client_id",
+            th.StringType,
+            secret=True,
+            description="JWT bearer: Salesforce Connected/External Client App consumer key (iss claim).",
+        ),
+        th.Property(
+            "jwt_username",
+            th.StringType,
+            description="JWT bearer: Salesforce username to impersonate (sub claim).",
+        ),
+        th.Property(
+            "jwt_private_key",
+            th.StringType,
+            secret=True,
+            description="JWT bearer: RSA private key PEM matching the cert uploaded to the Connected/External Client App.",
         ),
         th.Property(
             "domain",
@@ -77,6 +94,5 @@ class TargetSalesforce(Target):
 
     def __init__(self, *, config= None, parse_env_config: bool = False, validate_config: bool = True) -> None:
         super().__init__(config=config, parse_env_config=parse_env_config, validate_config=validate_config)
-        print(self.config.get("is_sandbox"))
         if self.config.get("is_sandbox") is not None:
             raise ConfigValidationError("is_sandbox has been deprecated, use domain. is_sandbox-False = 'login', is_sandbox-True = 'test'")
