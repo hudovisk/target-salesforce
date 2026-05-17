@@ -5,7 +5,7 @@ from dataclasses import asdict
 
 
 from singer_sdk.sinks import BatchSink
-from simple_salesforce import Salesforce, bulk, exceptions
+from simple_salesforce import Salesforce, bulk2, exceptions
 from target_salesforce.session_credentials import parse_credentials, SalesforceAuth
 from target_salesforce.utils.exceptions import InvalidStreamSchema, SalesforceApiError
 from singer_sdk.plugin_base import PluginBase
@@ -92,57 +92,71 @@ class SalesforceSink(BatchSink):
     def process_batch(self, context: dict) -> None:
         """Write out any prepped records and return once fully written."""
 
-        sf_object: bulk.SFBulkType = getattr(self.sf_client.bulk, self.stream_name)
+        sf_object: bulk2.SFBulk2Type = getattr(self.sf_client.bulk2, self.stream_name)
 
         results = self._process_batch_by_action(
             sf_object, self.config.get("action"), self._batched_records
         )
 
         self._validate_batch_result(
-            results, self.config.get("action"), self._batched_records
+            sf_object, results, self.config.get("action")
         )
 
         # Refresh session to avoid timeouts.
         self._new_session()
 
     def _process_batch_by_action(
-        self, sf_object: bulk.SFBulkType, action, batched_data
+        self, sf_object: bulk2.SFBulk2Type, action, batched_data
     ):
-        """Handle upsert records different method"""
+        """Dispatch the batch to the matching Bulk 2.0 ingest method.
+
+        Bulk 2.0 ingest methods take ``records=`` as a keyword argument and
+        return one summary dict per chunk, not per-record results.
+        """
 
         sf_object_action = getattr(sf_object, action)
 
         try:
             if action == "upsert":
-                results = sf_object_action(batched_data, "Id")
-            else:
-                results = sf_object_action(batched_data)
+                return sf_object_action(records=batched_data, external_id_field="Id")
+            return sf_object_action(records=batched_data)
         except exceptions.SalesforceMalformedRequest as e:
             self.logger.error(
                 f"Data in {action} {self.stream_name} batch does not conform to target SF {self.stream_name} Object"
             )
-            raise (e)
+            raise
 
-        return results
+    def _validate_batch_result(
+        self, sf_object: bulk2.SFBulk2Type, results: List[Dict], action
+    ):
+        total_processed = 0
+        total_failed = 0
+        total_records = 0
 
-    def _validate_batch_result(self, results: List[Dict], action, batched_records):
-        records_failed = 0
-        records_processed = 0
+        for job in results:
+            total_records += int(job.get("numberRecordsTotal", 0))
+            total_processed += int(job.get("numberRecordsProcessed", 0))
+            failed = int(job.get("numberRecordsFailed", 0))
+            total_failed += failed
+            if failed > 0:
+                job_id = job.get("job_id")
+                try:
+                    failed_csv = sf_object.get_failed_records(job_id)
+                    self.logger.error(
+                        f"Failed records for {action} {self.stream_name} "
+                        f"(job {job_id}):\n{failed_csv}"
+                    )
+                except Exception as exc:
+                    self.logger.error(
+                        f"Could not fetch failed records for job {job_id}: {exc}"
+                    )
 
-        for i, result in enumerate(results):
-            if result.get("success"):
-                records_processed += 1
-            else:
-                records_failed += 1
-                self.logger.error(
-                    f"Failed {action} to to {self.stream_name}. Error: {result.get('errors')}. Record {batched_records[i]}"
-                )
-
+        successful = total_processed - total_failed
         self.logger.info(
-            f"{action} {records_processed}/{len(results)} to {self.stream_name}."
+            f"{action} {successful}/{total_records} to {self.stream_name}."
         )
 
-        if records_failed > 0 and not self.config.get("allow_failures"):
+        if total_failed > 0 and not self.config.get("allow_failures"):
             raise SalesforceApiError(
-                f"{records_failed} error(s) in {action} batch commit to {self.stream_name}."
+                f"{total_failed} error(s) in {action} batch commit to {self.stream_name}."
             )

@@ -66,6 +66,12 @@ Here's a possible workflow on how to best use this tap in an Operational Analyti
 3. tap-[DB] -> target-salesforce
    - Consider using [inline stream maps](https://sdk.meltano.com/en/latest/stream_maps.html#customized-stream-map-behaviors) if you need to rename fields to match the SF Object
 
+### Bulk API version
+
+This target writes through Salesforce's **Bulk API 2.0** (`/services/data/vXX.0/jobs/ingest`). The earlier `1.x` versions of this target used Bulk API 1.0 via `simple_salesforce.bulk`, which authenticates with an `X-SFDC-Session` SOAP-style session id. That made it incompatible with OAuth2 JWT Bearer auth (JWT-issued access tokens are not valid SOAP session ids and every job fails with `InvalidSessionId`). Bulk 2.0 uses standard `Authorization: Bearer`, so it works with all three credential types (JWT, OAuth refresh-token, username/password).
+
+Per-record results are not returned inline by Bulk 2.0; when a job has failures the target fetches the failed-records CSV (`sf__Id`, `sf__Error`, plus the original fields) via `simple_salesforce.bulk2.SFBulk2Type.get_failed_records()` and logs it.
+
 ### Troubleshooting
 You can inspect the result of bulk API load jobs via the following URL:
 [DOMAIN].lightning.force.com/lightning/setup/AsyncApiJobStatus/home

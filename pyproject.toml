@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "target-salesforce"
-version = "2.1.0"
+version = "2.2.0"
 description = "`target-salesforce` is a Singer target for Salesforce, built with the Meltano SDK for Singer Targets."
 authors = ["Dan Ladd"]
 keywords = [
