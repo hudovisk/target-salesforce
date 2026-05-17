@@ -14,10 +14,19 @@ Build with the [Meltano Target SDK](https://sdk.meltano.com).
 
 ### Accepted Config Options
 
-You must authenticate with OAuth (`client_id`, `client_secret`, and `refresh_token`) or User/Pass (`username`, `password`, and `security_token`).
+You must authenticate with one of:
+
+- **JWT bearer** (`jwt_client_id`, `jwt_username`, `jwt_private_key`) — recommended for unattended/server-to-server use, since it relies on a keypair rather than expiring passwords or revocable refresh tokens.
+- **OAuth refresh-token** (`client_id`, `client_secret`, `refresh_token`).
+- **Username/password** (`username`, `password`, `security_token`).
+
+When more than one set is provided, the target picks in this order: JWT → OAuth → username/password.
 
 | Setting             | Required | Default | Description |
 |:--------------------|:--------:|:-------:|:------------|
+| jwt_client_id       | False     | None    | JWT bearer: Connected/External Client App consumer key (iss claim) |
+| jwt_username        | False     | None    | JWT bearer: Salesforce username to impersonate (sub claim). User must be pre-authorized for the app |
+| jwt_private_key     | False     | None    | JWT bearer: RSA private key (PEM) matching the cert uploaded to the app |
 | client_id           | False     | None    | OAuth client_id  |
 | client_secret       | False     | None    | OAuth client_secret |
 | refresh_token       | False     | None    | OAuth refresh_token |
@@ -38,6 +47,7 @@ target-salesforce --about
 ### Source Authentication and Authorization
 
 - For Oauth, you must create a connected app. See details from the [Salesforce documentation](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_understanding_web_server_oauth_flow.htm).
+- For JWT bearer, create a Connected/External Client App with the "Use digital signatures" option, upload an X.509 cert whose private key you control, pre-authorize the user (via profile or permission set), and ensure the user has consented to the app at least once (via the browser OAuth flow). See [Salesforce's JWT bearer flow docs](https://help.salesforce.com/s/articleView?id=xcloud.remoteaccess_oauth_jwt_flow.htm).
 
 ## Usage
 
